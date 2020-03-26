@@ -31,12 +31,41 @@ class DAFIterator:
     #paragraph element at which the main text starts
     PAR_START = 481
 
-    def __init__(self, fname="data/gibbon_daf.html"):
+    def __init__(self, fname="data/gibbon_daf.html", logfile="log.txt"):
         self.fname = fname
+        self.logfile = logfile
         self.parsed = None
         self.load_parsed()
 
+        self._reset()
+
+    def _reset(self):
         self._current_body_par = None
+        self.main_count = 0
+        self.footnote_count = 0
+        self._logbuf = []
+
+    def log(self, s):
+        self._logbuf.append(s)
+
+
+
+    def _make_log_header(self):
+        header = [f"linking text in {self.fname}"]
+        totalct = self.main_count + self.footnote_count
+        header.append(f"total chars: {totalct}")
+        header.append(f"maintext chars: {self.main_count} ({100 * self.main_count / totalct:.4f}%)")
+        header.append(f"footnote chars: {self.footnote_count} ({100 * self.footnote_count / totalct:.4f}%)")
+        header.append("------")
+        self._logbuf = header + self._logbuf
+
+    def flush_log(self):
+        self._make_log_header()
+        with open(self.logfile, 'w') as f:
+            for s in self._logbuf:
+                f.write(s + "\n")
+
+        self._logbuf = []
 
     def load_parsed(self):
         """Load parsed beautifulsoup object holding the full html"""
@@ -94,27 +123,35 @@ class DAFIterator:
         for par in self._main_paragraphs_raw():
             par_links = par.find_all('a')
             if len(par_links) == 0:
+                self.main_count += len(par.text)
                 yield par.text
             else:
                 for el in par.contents:
                     if el.name is None:
                         #this is plain text
+                        self.main_count += len(str(el))
                         yield str(el)
                     elif el.name == "a" and "href" in el.attrs:
                         id = el["href"].lstrip('#')
                         try:
                             foot_par = self._get_footnote_par(id)
                         except NoFootnoteError:
-                            print(f"Could not find footnote for {id}, skipping.")
+                            self.log(f"Could not find footnote for {id}, skipping.")
+                        self.footnote_count += len(foot_par.text)
                         yield foot_par.text
 
 
 if __name__ == "__main__":
 
-    wordIter = DAFIterator()
     outfile = "data/gibbon_daf_linked.txt"
+    logfile = "data/gibbon_daf_linked_log.txt"
+    wordIter = DAFIterator(logfile=logfile)
+
     with open(outfile, 'w') as f:
         for i,s in enumerate(wordIter.linked_text_paragraphs()):
             if i%1000 == 0:
                 print(i)
             f.write(s+ "\n")
+
+    wordIter.flush_log()
+    wordIter._reset()
