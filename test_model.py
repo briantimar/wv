@@ -31,5 +31,30 @@ class SkipGramWVTest(unittest.TestCase):
         self.assertEqual(cg.shape, (len(context_indices), self.model.sub_dimension))
         self.assertEqual(ng.shape, (len(noise_indices), self.model.sub_dimension))
 
+    def test_apply_vector_updates(self):
+        model = SkipGramWV(10, 2)
+        model._weights = np.zeros_like(model._weights)
+
+        input_index = 4
+        context_indices = [2, 5]
+        noise_indices = [3, 3, 0]
+        di = np.ones(1)
+        dc = np.ones((2,1))
+        dn = np.ones((3, 1))
+
+        model._apply_vector_updates(input_index, context_indices, noise_indices,
+                                    di, dc, dn)
+        
+        self.assertAlmostEqual(diff(model._input_vectors[4], -np.ones(1)), 0)
+        self.assertAlmostEqual(diff(model._output_vectors[2], -np.ones(1)), 0)
+        self.assertAlmostEqual(diff(model._output_vectors[3], - 2 * np.ones(1)), 0)
+
+    def test_do_sgd_update(self):
+        input_index = 4
+        context_indices = [1,2]
+        noise_indices = [4, 12]
+
+        self.model.do_sgd_update(input_index, context_indices, noise_indices, 0.01)
+
 if __name__ == "__main__":
     unittest.main()

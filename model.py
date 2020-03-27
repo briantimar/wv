@@ -85,4 +85,21 @@ class SkipGramWV:
 
         return input_grad, context_output_grads, noise_output_grads
 
-    
+    def _apply_vector_updates(self, input_index, context_indices, noise_indices,
+                         input_delta, context_output_delta, noise_output_delta):
+        """Subtract the given vectors from the i/o vectors at the specified indicies."""
+        self._input_vectors[input_index] -= input_delta
+        for i, iv in enumerate(context_indices):
+            self._output_vectors[iv] -= context_output_delta[i]
+        for i, iv in enumerate(noise_indices):
+            self._output_vectors[iv] -= noise_output_delta[i]
+
+    def do_sgd_update(self, input_index, context_indices, noise_indices, lr):
+        """ Perform a single gradient-descent update of the weights using the provided learning rate.
+        """
+        ig, cg, ng = self._gradient_tensors(input_index, context_indices, noise_indices)
+        di = lr * ig
+        dco = lr * cg
+        dno = lr * ng
+        self._apply_vector_updates(input_index, context_indices, noise_indices, 
+                                    di, dco, dno)
