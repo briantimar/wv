@@ -52,6 +52,21 @@ class TokenSet:
             self._build_index_map()
         return self._index_map
 
+    @property
+    def counts(self):
+        """array of counts in descending order."""
+        return np.asarray([word_tup[1] for word_tup in self.sorted_words])
+
+    @property
+    def num_tokens(self):
+        """Number of unique tokens in the dataset."""
+        return len(self.sorted_words)
+
+    @property
+    def probs(self):
+        """Returns array of probabilities, in descending order, for words in the dataset."""
+        return self.counts / len(self)
+
     def __len__(self):
         if self._count is None:
             raise ValueError
@@ -62,6 +77,10 @@ class TokenSet:
         index of a word in the full list of words sorted by frequency."""
         for word in iter(self):
             yield self.index_map[word]
+
+    def sample_frequency(self, N):
+        """Sample N word indices drawn according to the frequency distribution defined by the dataset."""
+        return np.random.choice(len(self.sorted_words), size=(N,),p=self.probs)
 
 def write_token_stats(tokenpath, statsfile):
         tokens = TokenSet(tokenpath)
@@ -100,8 +119,8 @@ if __name__ == "__main__":
     tokenpath = "data/gibbon_daf_tokens.txt"
     statsfile = "data/token_stats.txt"
 
-    # plot_token_probs(tokenpath)
-
+    tokenset = TokenSet(tokenpath)
+    print(tokenset.sample_frequency(100))
 
    
 
