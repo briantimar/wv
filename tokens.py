@@ -1,4 +1,5 @@
-from collections import Counter
+from collections import Counter, deque
+from itertools import chain
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -81,6 +82,63 @@ class TokenSet:
     def sample_frequency(self, N):
         """Sample N word indices drawn according to the frequency distribution defined by the dataset."""
         return np.random.choice(len(self.sorted_words), size=(N,),p=self.probs)
+
+    def sample_noise(self, N, distribution="frequency"):
+        """Returns N "noise" word indices according to the given distribution."""
+        if distribution == "frequency":
+            return self.sample_frequency(N)
+        else:
+            raise ValueError(f"Invalid noise distribution: {distribution}")
+
+
+class ContextIterator:
+    """ A wrapper around tokenset that yields input indices along with the indices of tokens within a fixed context
+    window."""
+
+    def __init__(self, tokenset, context_radius, noise_distribution="frequency", num_noise=None):
+        """context_radius: how far to search forwards and backwards from the input word to define context."""
+        if context_radius <1:
+            raise ValueError(f"Not a valid context radius: {context_radius}")
+        self.context_radius = context_radius
+        # total size of the context region, including the input
+        self.context_size = 2 * context_radius + 1
+        self.tokenset = tokenset
+        self.noise_distribution = noise_distribution
+        if num_noise is None:
+            num_noise = 2 * self.context_radius
+        self.num_noise = num_noise
+
+        # all words, including the input, in the context region
+        self._context = deque(maxlen=self.context_size)
+
+    def get_noise_indices(self, num_noise):
+        """Returns num_noise word indices sampled from the underlying tokenset distribution."""
+        return list(self.tokenset.sample_noise(num_noise, distribution=self.noise_distribution))
+
+    def __iter__(self):
+        """Iterate over (input_index, context_indices, noise_indices) tuples)
+            Assumes the dataset has size at least context_size"""
+        self._context.clear()
+        # buffer one edge of the word-stream with None, to define contexts missing part of the right side
+        index_iter = chain(self.tokenset.indices(), [None]*self.context_radius)
+        for i, index in enumerate(index_iter):
+            self._context.append(index)
+            if i >= self.context_radius:
+                #available context has been added
+                input_loc = len(self._context) -1 - self.context_radius
+                _context_all = list(self._context)
+                if _context_all[-1] is None:
+                    end = _context_all.index(None)
+                    _context_all = _context_all[:end]
+                context_indices = _context_all[:input_loc] + _context_all[input_loc+1:]
+                noise_indices = self.get_noise_indices(self.num_noise)
+                yield (_context_all[input_loc], context_indices, noise_indices)
+
+
+
+
+
+
 
 def write_token_stats(tokenpath, statsfile):
         tokens = TokenSet(tokenpath)
