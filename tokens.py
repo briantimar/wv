@@ -8,12 +8,29 @@ import matplotlib.pyplot as plt
 class TokenSet:
     """Iterates over tokens stored as lines in a text file."""
 
-    def __init__(self, fname):
+    def __init__(self, fname, noise_distribution="frequency",noise_refresh_size=None):
+        """Noise distribution: distribution from which to draw noise tokens"""
+
         self.fname = fname
         self._count = None
         self._multiset = None
         self._sorted_words = None
         self._index_map = None
+
+        self.noise_distribution = noise_distribution
+        self.noise_refresh_size = noise_refresh_size
+        self._noise_samples = []
+        self._init()
+
+    def _init(self):
+        """Performs all "startup" functions. Builds multiset and frequency-sorted words, and pre-computes
+        a batch of noise words."""
+        self._build_multiset()
+        self._sort_words()
+        self._build_index_map()
+        if self.noise_refresh_size is None:
+            self.noise_refresh_size = 50000
+        self._noise_samples = self._sample_noise(self.noise_refresh_size)
 
     def __iter__(self):
         with open(self.fname) as f:
@@ -30,6 +47,18 @@ class TokenSet:
 
     def _build_index_map(self):
         self._index_map = {word_tup[0] : i for i, word_tup in enumerate(self.sorted_words)}
+
+    def _sample_frequency(self, N):
+        """Sample N word indices drawn according to the frequency distribution defined by the dataset."""
+        return list(np.random.choice(len(self.sorted_words), size=(N,),p=self.probs))
+
+    def _sample_noise(self, N):
+        """Computes N "noise" word indices."""
+        print(f"Generating {N} samples")
+        if self.noise_distribution == "frequency":
+            return self._sample_frequency(N)
+        else:
+            raise ValueError(f"Invalid noise distribution: {self.noise_distribution}")
 
     @property
     def multiset(self):
@@ -68,28 +97,22 @@ class TokenSet:
         """Returns array of probabilities, in descending order, for words in the dataset."""
         return self.counts / len(self)
 
-    def __len__(self):
-        if self._count is None:
-            raise ValueError
-        return self._count  
-
     def indices(self):
         """Iterator over indices of words in the training set. These are defined by frequency, namely as the
         index of a word in the full list of words sorted by frequency."""
         for word in iter(self):
             yield self.index_map[word]
 
-    def sample_frequency(self, N):
-        """Sample N word indices drawn according to the frequency distribution defined by the dataset."""
-        return np.random.choice(len(self.sorted_words), size=(N,),p=self.probs)
+    def sample_noise(self, N):
+        """Return list of N word indices drawn from the 'noise' distribution."""
+        while len(self._noise_samples) < N:
+            self._noise_samples += self._sample_noise(self.noise_refresh_size)
+        noise_words, self._noise_samples = self._noise_samples[:N], self._noise_samples[N:]
 
-    def sample_noise(self, N, distribution="frequency"):
-        """Returns N "noise" word indices according to the given distribution."""
-        if distribution == "frequency":
-            return self.sample_frequency(N)
-        else:
-            raise ValueError(f"Invalid noise distribution: {distribution}")
-
+    def __len__(self):
+        if self._count is None:
+            raise ValueError
+        return self._count  
 
 class ContextIterator:
     """ A wrapper around tokenset that yields input indices along with the indices of tokens within a fixed context
@@ -133,11 +156,6 @@ class ContextIterator:
                 context_indices = _context_all[:input_loc] + _context_all[input_loc+1:]
                 noise_indices = self.get_noise_indices(self.num_noise)
                 yield (_context_all[input_loc], context_indices, noise_indices)
-
-
-
-
-
 
 
 def write_token_stats(tokenpath, statsfile):
