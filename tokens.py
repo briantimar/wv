@@ -29,6 +29,7 @@ class TokenSet:
         self._sort_words()
         self._build_index_map()
         if self.noise_refresh_size is None:
+            print("No refresh size provided, using default 50000")
             self.noise_refresh_size = 50000
         self._noise_samples = self._sample_noise(self.noise_refresh_size)
 
