@@ -1,5 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
+from nltk.tokenize.treebank import TreebankWordTokenizer
+from nltk.tokenize import word_tokenize
 
 ## the gibbon utf-8 txt
 # target = "https://www.gutenberg.org/files/25717/25717-0.txt"
@@ -140,8 +142,37 @@ class DAFIterator:
                         self.footnote_count += len(foot_par.text)
                         yield foot_par.text
 
+class DAFWords:
 
-if __name__ == "__main__":
+    def __init__(self, textfile="data/gibbon_daf_linked.txt"):
+        self.textfile = textfile
+
+    punctuation=",.:?;-*\&\'\""
+
+    def tokenize_generic(self, tokenizer, N=None, drop_punctuation=True):
+        """Tokenize on line-by-line basis."""
+        ct, done = 0, False
+        with open(self.textfile) as f:
+            for ln in f.readlines():
+                if done:
+                    break
+                ln = ln.replace("(return)", "")
+                for token in tokenizer(ln.strip()):
+                    if not done:
+                        if (not drop_punctuation) or (token not in self.punctuation):
+                            yield token
+                            ct += 1
+                    if (N is not None ) and ct == N:
+                        done = True
+    
+    def tokenize(self, N=None, drop_punctuation=True, lower=True):
+        """tokenize using the nltk default (ptb + a 'punkt' sentence tokenizer)"""
+        for tok in self.tokenize_generic(word_tokenize, N=N, drop_punctuation=drop_punctuation):
+            if lower:
+                tok = tok.lower()
+            yield tok
+
+def write_linked_text():
 
     outfile = "data/gibbon_daf_linked.txt"
     logfile = "data/gibbon_daf_linked_log.txt"
@@ -155,3 +186,17 @@ if __name__ == "__main__":
 
     wordIter.flush_log()
     wordIter._reset()
+
+def write_tokens(N=None):
+    textfile = "data/gibbon_daf_linked.txt"
+    tokenfile = "data/gibbon_daf_tokens.txt"
+    word_source = DAFWords(textfile=textfile)
+    with open(tokenfile, 'w') as f:
+        for i,word in enumerate(word_source.tokenize(N=N, lower=True)):
+            f.write(word + "\n")
+    print(f"Wrote {i+1} tokens to {tokenfile}.")
+    
+if __name__ == "__main__":
+
+    write_tokens()
+    
