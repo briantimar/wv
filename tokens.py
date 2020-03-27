@@ -54,7 +54,6 @@ class TokenSet:
 
     def _sample_noise(self, N):
         """Computes N "noise" word indices."""
-        print(f"Generating {N} samples")
         if self.noise_distribution == "frequency":
             return self._sample_frequency(N)
         else:
@@ -118,7 +117,7 @@ class ContextIterator:
     """ A wrapper around tokenset that yields input indices along with the indices of tokens within a fixed context
     window."""
 
-    def __init__(self, tokenset, context_radius, noise_distribution="frequency", num_noise=None):
+    def __init__(self, tokenset, context_radius, num_noise=None):
         """context_radius: how far to search forwards and backwards from the input word to define context."""
         if context_radius <1:
             raise ValueError(f"Not a valid context radius: {context_radius}")
@@ -126,7 +125,7 @@ class ContextIterator:
         # total size of the context region, including the input
         self.context_size = 2 * context_radius + 1
         self.tokenset = tokenset
-        self.noise_distribution = noise_distribution
+        
         if num_noise is None:
             num_noise = 2 * self.context_radius
         self.num_noise = num_noise
@@ -136,7 +135,7 @@ class ContextIterator:
 
     def get_noise_indices(self, num_noise):
         """Returns num_noise word indices sampled from the underlying tokenset distribution."""
-        return list(self.tokenset.sample_noise(num_noise, distribution=self.noise_distribution))
+        return list(self.tokenset.sample_noise(num_noise))
 
     def __iter__(self):
         """Iterate over (input_index, context_indices, noise_indices) tuples)
