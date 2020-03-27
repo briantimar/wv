@@ -4,7 +4,7 @@ import numpy as np
 
 def sigma(x):
     """sigmoid function"""
-    return 1.0 / (np.exp(x) + 1.0)
+    return 1.0 / (np.exp(-x) + 1.0)
 
 class SkipGramWV:
     """Associates a vocabulary of V words with a dense (V, d) tensor. d is the dimensionality of
@@ -53,11 +53,14 @@ class SkipGramWV:
         output_vecs = self._output_vectors[context_indices + noise_indices, :]
         return input_vec, output_vecs
 
-    def _gradient_tensors(self, input_index, context_indices, noise_indices):
+    def _gradient_tensors(self, input_index, context_indices, noise_indices, wt_decay=0.0):
         """Computes nonzero gradients for the given input, context, and noise samples. 
+            wt_decay: weight decay coefficient. The larger this is, the more the model is penalized for having large 
+            weights.
             Returns: (subdim,) input vector gradient tensor
                       (num_context, subdim) context output vector gradient tensor
-                      (num_noise, subdim) noise output vector gradient tensor."""
+                      (num_noise, subdim) noise output vector gradient tensor.
+                """
         
         iv, ov = self._stack_vectors(input_index, context_indices, noise_indices)
         num_context = len(context_indices)
@@ -71,7 +74,7 @@ class SkipGramWV:
 
         #gradients for the context output vectors
         # (num_context, subdim) tensor
-        context_output_grads = np.outer(sigma(-context_io_products), iv) 
+        context_output_grads = -np.outer(sigma(-context_io_products), iv) 
 
         #gradents for the noise output vectors
         # (num_noise, subdim) tensor
@@ -83,7 +86,40 @@ class SkipGramWV:
         input_grad_n = sum([sigma(noise_io_products[i]) * ov[num_context+i] for i in range(num_noise)])
         input_grad = (input_grad_c + input_grad_n).reshape(self.sub_dimension)
 
+        # add weight decay
+        input_grad += 2 * wt_decay * iv
+        context_output_grads += 2 * wt_decay * ov[:num_context, :]
+        noise_output_grads += 2 * wt_decay * ov[num_context:, :]
+
         return input_grad, context_output_grads, noise_output_grads
+
+    def neg_loss(self, input_index, context_indices, noise_indices):
+        """Compute loss estimator for a single input index."""
+        iv, ov = self._stack_vectors(input_index, context_indices, noise_indices)
+        num_context = len(context_indices)
+        num_noise = len(noise_indices)
+        num_output = num_context + num_noise
+
+        io_products = np.dot(ov, iv)
+        pos_loss = np.log(sigma(io_products[:num_context]))
+        neg_loss = np.log(sigma(-io_products[num_context]))
+        return -( np.sum(pos_loss) + np.sum(neg_loss))
+
+    def dot(self, input, output):
+        """Compute a single input-output dot product
+            input = index of the input vector.
+            output = index of the output vector.
+            """
+        return np.dot(self._input_vectors[input], self._output_vectors[output])
+
+    def input_norm(self, index):
+        """Norm of the input vector at the specified index."""
+        return np.sqrt(np.sum(self._input_vectors[index]**2))
+
+    def output_norm(self, index):
+        """Norm of the output vector at the specified index."""
+        return np.sqrt(np.sum(self._output_vectors[index]**2))
+
 
     def _apply_vector_updates(self, input_index, context_indices, noise_indices,
                          input_delta, context_output_delta, noise_output_delta):
@@ -94,10 +130,10 @@ class SkipGramWV:
         for i, iv in enumerate(noise_indices):
             self._output_vectors[iv] -= noise_output_delta[i]
 
-    def do_sgd_update(self, input_index, context_indices, noise_indices, lr):
+    def do_sgd_update(self, input_index, context_indices, noise_indices, lr, wt_decay=0.0):
         """ Perform a single gradient-descent update of the weights using the provided learning rate.
         """
-        ig, cg, ng = self._gradient_tensors(input_index, context_indices, noise_indices)
+        ig, cg, ng = self._gradient_tensors(input_index, context_indices, noise_indices, wt_decay=wt_decay)
         di = lr * ig
         dco = lr * cg
         dno = lr * ng

@@ -48,6 +48,7 @@ class SkipGramWVTest(unittest.TestCase):
         self.assertAlmostEqual(diff(model._input_vectors[4], -np.ones(1)), 0)
         self.assertAlmostEqual(diff(model._output_vectors[2], -np.ones(1)), 0)
         self.assertAlmostEqual(diff(model._output_vectors[3], - 2 * np.ones(1)), 0)
+        
 
     def test_do_sgd_update(self):
         input_index = 4
