@@ -107,6 +107,7 @@ class TokenSet:
         while len(self._noise_samples) < N:
             self._noise_samples += self._sample_noise(self.noise_refresh_size)
         noise_words, self._noise_samples = self._noise_samples[:N], self._noise_samples[N:]
+        return noise_words
 
     def __len__(self):
         if self._count is None:
