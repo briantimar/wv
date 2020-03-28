@@ -83,8 +83,11 @@ class SkipGramWV:
 
         # gradient for the input vector
         # (subdim,) tensor
-        input_grad_c = - sum([sigma(-context_io_products[i]) * ov[i] for i in range(num_context)])
-        input_grad_n = sum([sigma(noise_io_products[i]) * ov[num_context+i] for i in range(num_noise)])
+        c_wts = sigma(-context_io_products)
+        n_wts = sigma(noise_io_products)
+        
+        input_grad_c = - sum([ c_wts[i] * ov[i] for i in range(num_context)])
+        input_grad_n = sum([ n_wts[i] * ov[num_context+i] for i in range(num_noise)])
         input_grad = (input_grad_c + input_grad_n).reshape(self.sub_dimension)
 
         # add weight decay
@@ -103,7 +106,7 @@ class SkipGramWV:
 
         io_products = np.dot(ov, iv)
         pos_loss = np.log(sigma(io_products[:num_context]))
-        neg_loss = np.log(sigma(-io_products[num_context]))
+        neg_loss = np.log(sigma(-io_products[num_context:]))
         return -( np.sum(pos_loss) + np.sum(neg_loss))
 
     def dot(self, input, output):
