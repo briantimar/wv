@@ -8,8 +8,11 @@ import matplotlib.pyplot as plt
 class TokenSet:
     """Iterates over tokens stored as lines in a text file."""
 
-    def __init__(self, fname, noise_distribution="frequency",noise_refresh_size=None):
-        """Noise distribution: distribution from which to draw noise tokens"""
+    def __init__(self, fname, noise_distribution="frequency",noise_refresh_size=None, 
+                    min_count=10):
+        """Noise distribution: distribution from which to draw noise tokens
+            noise_refresh_size: number of noise words to sample at a time.
+            min_count: only yield words with frequency higher than this"""
 
         self.fname = fname
         self._count = None
@@ -17,9 +20,11 @@ class TokenSet:
         self._sorted_words = None
         self._index_map = None
 
+        self.min_count = min_count
         self.noise_distribution = noise_distribution
         self.noise_refresh_size = noise_refresh_size
         self._noise_samples = []
+        self._initialized = False
         self._init()
 
     def _init(self):
@@ -31,12 +36,19 @@ class TokenSet:
         if self.noise_refresh_size is None:
             print("No refresh size provided, using default 50000")
             self.noise_refresh_size = 50000
+        self._initialized = True
         self._noise_samples = self._sample_noise(self.noise_refresh_size)
-
+        
     def __iter__(self):
+        """Iterate over individual word strings: each line is one string.
+            The first time __iter__ is called, all words are yielded; this happens during _init
+            in order to build up frequencies.
+            On subsequent calls, only words which are more frequent than min_count are yielded"""
         with open(self.fname) as f:
             for i, ln in enumerate(f.readlines()):
-                yield ln.strip()
+                w = ln.strip()
+                if (not self._initialized) or self.count(w) >= self.min_count:
+                    yield w
         self._count = i+1
 
     def _build_multiset(self):
@@ -83,6 +95,10 @@ class TokenSet:
         return self._index_map
 
     @property
+    def words(self):
+        return [word_tup[0] for word_tup in self.sorted_words]
+
+    @property
     def counts(self):
         """array of counts in descending order."""
         return np.asarray([word_tup[1] for word_tup in self.sorted_words])
@@ -109,6 +125,16 @@ class TokenSet:
             self._noise_samples += self._sample_noise(self.noise_refresh_size)
         noise_words, self._noise_samples = self._noise_samples[:N], self._noise_samples[N:]
         return noise_words
+
+    def index_of(self, word):
+        """Returns integer index of the given word string."""
+        if word not in self.index_map:
+            raise KeyError(f"{word} is not in the vocabulary")
+        return self.index_map[word]
+
+    def count(self, word):
+        """Returns count of the given word in the underlying document"""
+        return self.multiset[word]
 
     def __len__(self):
         if self._count is None:

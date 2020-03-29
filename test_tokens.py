@@ -25,6 +25,16 @@ class TestContextIterator(unittest.TestCase):
         self.assertEqual(inputs, list(range(4)))
         self.assertEqual(contexts, [[1], [0,2], [1, 3], [2]])
 
+    def test_min_count(self):
+        dataset = "data/gibbon_daf_tokens.txt"
+        ts = TokenSet(dataset, min_count=20)
+        min_ct = len(ts)
+        for w in ts:
+            ct = ts.count(w)
+            if ct < min_ct:
+                min_ct = ct
+        self.assertTrue(min_ct >= 20)
+
 
 if __name__ == "__main__":
     unittest.main()
