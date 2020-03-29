@@ -3,82 +3,61 @@ from itertools import chain
 import numpy as np
 import matplotlib.pyplot as plt
 
-"""Statistics on the tokenized dataset."""
 
 class TokenSet:
-    """Iterates over tokens stored as lines in a text file."""
+    """Wrapper over the underlying pile of words. It knows how many words there are, 
+    their individual frequencies, etc."""
 
-    def __init__(self, fname, noise_distribution="frequency",noise_refresh_size=None, 
-                    min_count=10):
-        """Noise distribution: distribution from which to draw noise tokens
-            noise_refresh_size: number of noise words to sample at a time.
-            min_count: only yield words with frequency higher than this"""
+    def __init__(self, fname, num_word=None, alpha=1.0,noise_refresh_size=50000 ):
+        """fname: filename where words are stored.
+            num_word: if not None, only the num_word most popular words will be yielded."""
 
         self.fname = fname
-        self._count = None
-        self._multiset = None
+        self.num_word = num_word
+        self.alpha = alpha
+        self.noise_refresh_size = noise_refresh_size
+
+        #total number of words in the source document
+        self._len = None
+        self._counts = None
         self._sorted_words = None
         self._index_map = None
 
-        self.min_count = min_count
-        self.noise_distribution = noise_distribution
-        self.noise_refresh_size = noise_refresh_size
+        self._rescaled_probs = None
         self._noise_samples = []
         self._initialized = False
         self._init()
 
     def _init(self):
-        """Performs all "startup" functions. Builds multiset and frequency-sorted words, and pre-computes
-        a batch of noise words."""
-        self._build_multiset()
+        """Performs all "startup" functions. Builds multiset and frequency-sorted words"""
+        self._build_counts()
         self._sort_words()
         self._build_index_map()
-        if self.noise_refresh_size is None:
-            print("No refresh size provided, using default 50000")
-            self.noise_refresh_size = 50000
-        self._initialized = True
-        self._noise_samples = self._sample_noise(self.noise_refresh_size)
+        self._noise_samples = self._sample(self.noise_refresh_size)
         
     def __iter__(self):
         """Iterate over individual word strings: each line is one string.
-            The first time __iter__ is called, all words are yielded; this happens during _init
-            in order to build up frequencies.
-            On subsequent calls, only words which are more frequent than min_count are yielded"""
+            """
         with open(self.fname) as f:
             for i, ln in enumerate(f.readlines()):
                 w = ln.strip()
-                if (not self._initialized) or self.count(w) >= self.min_count:
+                if (not self._initialized) or (w in self):
                     yield w
-        self._count = i+1
+        self._initialized = True
+        self._total_count = i+1
 
-    def _build_multiset(self):
-        self._multiset = Counter(iter(self))
+    def _build_counts(self):
+        self._counts = Counter(iter(self))
 
     def _sort_words(self):
-        counts = self.multiset
-        self._sorted_words = sorted(counts.items(), key=lambda t: -t[1])
+        self._sorted_words = sorted(self._counts.items(), key=lambda t: -t[1])
+        if self.num_word is not None:
+            # drop less frequent words
+            self._sorted_words = self._sorted_words[:self.num_word]
 
     def _build_index_map(self):
         self._index_map = {word_tup[0] : i for i, word_tup in enumerate(self.sorted_words)}
 
-    def _sample_frequency(self, N):
-        """Sample N word indices drawn according to the frequency distribution defined by the dataset."""
-        return list(np.random.choice(len(self.sorted_words), size=(N,),p=self.probs))
-
-    def _sample_noise(self, N):
-        """Computes N "noise" word indices."""
-        if self.noise_distribution == "frequency":
-            return self._sample_frequency(N)
-        else:
-            raise ValueError(f"Invalid noise distribution: {self.noise_distribution}")
-
-    @property
-    def multiset(self):
-        """a dictionary mapping words to frequencies."""
-        if self._multiset is None:
-            self._build_multiset()
-        return self._multiset
-    
     @property
     def sorted_words(self):
         """A list of (word, count) pairs in descending order of count."""
@@ -86,14 +65,6 @@ class TokenSet:
             self._sort_words()
         return self._sorted_words
     
-    @property
-    def index_map(self):
-        """Dictionary mapping word strings to unique indices. These correspond to order when 
-        sorted by descending frequency."""
-        if self._index_map is None:
-            self._build_index_map()
-        return self._index_map
-
     @property
     def words(self):
         return [word_tup[0] for word_tup in self.sorted_words]
@@ -104,7 +75,7 @@ class TokenSet:
         return np.asarray([word_tup[1] for word_tup in self.sorted_words])
 
     @property
-    def num_tokens(self):
+    def vocab_size(self):
         """Number of unique tokens in the dataset."""
         return len(self.sorted_words)
 
@@ -119,27 +90,43 @@ class TokenSet:
         for word in iter(self):
             yield self.index_map[word]
 
-    def sample_noise(self, N):
-        """Return list of N word indices drawn from the 'noise' distribution."""
-        while len(self._noise_samples) < N:
-            self._noise_samples += self._sample_noise(self.noise_refresh_size)
-        noise_words, self._noise_samples = self._noise_samples[:N], self._noise_samples[N:]
-        return noise_words
-
     def index_of(self, word):
         """Returns integer index of the given word string."""
-        if word not in self.index_map:
+        if word not in self:
             raise KeyError(f"{word} is not in the vocabulary")
-        return self.index_map[word]
+        return self._index_map[word]
 
     def count(self, word):
         """Returns count of the given word in the underlying document"""
-        return self.multiset[word]
+        if word not in self:
+            raise KeyError(f"{word} is not in vocabulary")
+        return self._counts[word]
+
+    def __contains__(self, word):
+        return word in self._index_map
 
     def __len__(self):
-        if self._count is None:
-            raise ValueError
-        return self._count  
+        if self._len is None:
+            self._len = 0
+            for w in iter(self):
+                self._len += 1
+        return self._len
+
+    def _sample(self, N):
+        """Sample N word indices drawn according to the frequency distribution defined by the dataset.
+            probs are rescaled by self.alpha prior to sampling."""
+        if self._rescaled_probs is None:
+            probs = np.power(self.probs, self.alpha)
+            self._rescaled_probs = probs / np.sum(probs)
+        return list(np.random.choice(self.vocab_size, size=(N,),p=self._rescaled_probs))
+    
+    def sample(self, N):
+        """Return list of N word indices drawn from the 'noise' distribution."""
+        while len(self._noise_samples) < N:
+            self._noise_samples += self._sample(self.noise_refresh_size)
+        noise_words, self._noise_samples = self._noise_samples[:N], self._noise_samples[N:]
+        return noise_words
+
 
 class ContextIterator:
     """ A wrapper around tokenset that yields input indices along with the indices of tokens within a fixed context
@@ -222,8 +209,8 @@ if __name__ == "__main__":
     tokenpath = "data/gibbon_daf_tokens.txt"
     statsfile = "data/token_stats.txt"
 
-    tokenset = TokenSet(tokenpath)
-    print(tokenset.sample_frequency(100))
+    tokenset = TokenSet(tokenpath, num_word=1000)
+    # print(tokenset.sample_frequency(100))
 
    
 

@@ -1,5 +1,18 @@
 import unittest
-from tokens import TokenSet, ContextIterator
+from tokens import  TokenSet, ContextIterator
+
+class TestTokenSet(unittest.TestCase):
+    
+    def setUp(self):
+        tokenpath = "data/gibbon_daf_tokens.txt"
+        self.num_word = 1000
+        self.doc = TokenSet(tokenpath, num_word=self.num_word)
+    
+    def test_len(self):
+        self.assertEqual(self.doc.vocab_size, self.num_word)
+        self.assertAlmostEqual(sum(self.doc.probs), 1.0)
+        self.assertEqual(len(self.doc.probs), self.doc.num_word)
+
 
 class TestContextIterator(unittest.TestCase):
 
@@ -25,15 +38,6 @@ class TestContextIterator(unittest.TestCase):
         self.assertEqual(inputs, list(range(4)))
         self.assertEqual(contexts, [[1], [0,2], [1, 3], [2]])
 
-    def test_min_count(self):
-        dataset = "data/gibbon_daf_tokens.txt"
-        ts = TokenSet(dataset, min_count=20)
-        min_ct = len(ts)
-        for w in ts:
-            ct = ts.count(w)
-            if ct < min_ct:
-                min_ct = ct
-        self.assertTrue(min_ct >= 20)
 
 
 if __name__ == "__main__":
