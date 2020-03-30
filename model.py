@@ -11,7 +11,7 @@ class SkipGramWV:
     """Associates a vocabulary of V words with a dense (V, d) tensor. d is the dimensionality of
     the word vectors.
         As in the original skipgram papers, two separate "input" and "output" vectors are used for each
-        word - this makes gradient computations a little simpler.
+        word 
         Single word vectors can be obtained after training by concatenating the IO vectors."""
 
     def __init__(self, vocabulary_size, dimension):
@@ -143,5 +143,14 @@ class SkipGramWV:
         self._apply_vector_updates(input_index, context_indices, noise_indices, 
                                     di, dco, dno)
 
+    def load(self, wt_file):
+        """Load model weights from the given filepath (string)"""
+        wts = np.load(wt_file)
+        if wts.shape != self._weights.shape:
+            raise ValueError(f"Invalid shape {wts.shape} for loaded weights.")
+        self._weights = wts
 
-
+    def wordvec(self, i):
+        """Returns the word vector at index i."""
+        return self._weights[i,:].copy()
+    
