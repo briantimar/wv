@@ -1,0 +1,7 @@
+Main text / footnote size comparisons for DAF
+chars: total 17536442
+	 main text 13923788 (79.40 %)
+	 footnotes 3612654 (20.60 %)
+words: total 3936642
+	 main text 3070763 (78.00 %)
+	 footnotes 865879 (22.00 %)
