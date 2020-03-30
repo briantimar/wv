@@ -2,7 +2,7 @@ from collections import Counter, deque
 from itertools import chain
 import numpy as np
 import matplotlib.pyplot as plt
-
+import pickle
 
 class TokenSet:
     """Wrapper over the underlying pile of words. It knows how many words there are, 
@@ -88,7 +88,7 @@ class TokenSet:
         """Iterator over indices of words in the training set. These are defined by frequency, namely as the
         index of a word in the full list of words sorted by frequency."""
         for word in iter(self):
-            yield self.index_map[word]
+            yield self._index_map[word]
 
     def index_of(self, word):
         """Returns integer index of the given word string."""
@@ -127,6 +127,11 @@ class TokenSet:
         noise_words, self._noise_samples = self._noise_samples[:N], self._noise_samples[N:]
         return noise_words
 
+    def save(self, fname):
+        """Saves the tokenset to the given filepath."""
+        with open(fname, 'w') as f:
+            pickle.dump(self, f)
+        
 
 class ContextIterator:
     """ A wrapper around tokenset that yields input indices along with the indices of tokens within a fixed context
@@ -150,7 +155,7 @@ class ContextIterator:
 
     def get_noise_indices(self, num_noise):
         """Returns num_noise word indices sampled from the underlying tokenset distribution."""
-        return list(self.tokenset.sample_noise(num_noise))
+        return list(self.tokenset.sample(num_noise))
 
     def __iter__(self):
         """Iterate over (input_index, context_indices, noise_indices) tuples)
@@ -209,7 +214,7 @@ if __name__ == "__main__":
     tokenpath = "data/gibbon_daf_tokens.txt"
     statsfile = "data/token_stats.txt"
 
-    tokenset = TokenSet(tokenpath, num_word=1000)
+    tokenset = TokenSet(tokenpath, num_word=2000)
     # print(tokenset.sample_frequency(100))
 
    
