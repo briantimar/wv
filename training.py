@@ -4,14 +4,15 @@ import json
 import time
 import os
 
-def sgd_train(model, context_iter, epochs, lr, model_dir, wt_decay=0.0, logstep=100, verbose=False, logfile=None, 
+def sgd_train(model, context_iter, epochs, lr_fn,
+                model_dir, wt_decay=0.0, logstep=100, verbose=False, logfile=None, 
                 modelstep=200000, 
                 log_params = {}):
     """ Train the model via SGD on the given dataset. Gradients are *not* batched across different contexts.
         model: a SkipGramVW model.
         context_iter: iterator over input words and the corresponding context and noise tokens.
         epochs: how many passes to take over the full dataset.
-        lr: learning rate
+        lr_fn: lambda called at each word to produce learning rate
         wt_decay: weight decay coefficient (added to the loss function).
         logstep: number of updates between log steps
         verbose: whether to print stuff to terminal
@@ -23,17 +24,17 @@ def sgd_train(model, context_iter, epochs, lr, model_dir, wt_decay=0.0, logstep=
     if logfile is None:
         logfile = datetime.now().strftime("sgd_log_%y_%m_%d__%H_%M_%S.json")
     log_params.update({'loss': smoothed_losses, 'logstep': logstep, 
-                'lr': lr, 'wt_decay': wt_decay, 'epochs': epochs})
+                 'wt_decay': wt_decay, 'epochs': epochs})
     def log():
         with open(logfile, 'w') as f:
             json.dump(log_params, f)
     try:
-        log_params["t_start"] = datetime.now()
+        log_params["t_start"] = str(datetime.now())
         for ep in range(epochs):
             t0 = time.time()
             for i, (input_index, context, noise) in enumerate(context_iter):
                 tb = time.time()
-                model.do_sgd_update(input_index, context, noise, lr, wt_decay=wt_decay)
+                model.do_sgd_update(input_index, context, noise, lr_fn(), wt_decay=wt_decay)
                 tf = time.time()
                 tload = tb - t0
                 tsgd = tf - tb
@@ -46,19 +47,17 @@ def sgd_train(model, context_iter, epochs, lr, model_dir, wt_decay=0.0, logstep=
                         print(f"Word {i}: update time {tupdate} sec, loss {smoothed_losses[-1]}")
                     log()
                 if i % modelstep == 0:
-                    np.save(os.path.join(model_dir, f"model_{i}"), model._weights)
+                    np.save(os.path.join(model_dir, f"model_{i//modelstep}"), model._weights)
                 t0 = time.time()
     except KeyboardInterrupt:
         print("Halting early")
-    log_params["t_final"] = datetime.now()
+    log_params["t_final"] = str(datetime.now())
     log()
-    np.save(os.path.join(model_dir, f"model_final"), model._weights)
+    np.save(os.path.join(model_dir, "model_final"), model._weights)
     return model, smoothed_losses
 
 if __name__ == "__main__":
     pass
-
-
 
     # from tokens import TokenSet, ContextIterator
     # from model import SkipGramWV
